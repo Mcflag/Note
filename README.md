@@ -14,6 +14,18 @@
 7. HTTP、HTTPS、TCP/IP、Socket通信、三次握手四次挥手过程
 8. 设计模式（六大基本原则、项目中常用的设计模式、手写单例等）
 9. 断点续传
+10. volatile理解，JMM中主存和工作内存到底是啥？和JVM各个部分怎么个对应关系？[参考link](https://www.cnblogs.com/dolphin0520/p/3613043.html)
+11. 序列化，Serializable在序列化时使用了反射，从而导致GC的频繁调用。[参考link](https://www.cnblogs.com/yezhennan/p/5527506.html)
+
+12. 可见性，原子性，有序性
+* 可见性volatile，一个线程的修改对另外一个线程是马上可见的。
+* 原子性CAS操作，要么都做要么都不做
+* 有序性synchronized通过进入和退出Monitor(观察器)实现，CPU可能会乱序执行指令，如果在本线程内观察，所有操作都是有序的，如果在一个线程中观察另一个线程，所有操作都是无序的。[参考link](https://blog.csdn.net/qq_33689414/article/details/73527438)
+
+13. Java锁机制，java锁机制其实是锁总线
+14. Java的常量池？不同String赋值方法，引用是否相等？字面值是常量，在字节码中使用id索引，equals相等引用不一定相等，Android上String的构造函数会被虚拟机拦截，重定向到StringFactory
+15. HashMap的实现？树化阈值？负载因子？数组加链表加红黑树，默认负载因子0.75，树化阈值8，这部分比较常考，建议专门准备。
+16. Java实现无锁同步，CAS的实现如AtomicInteger等等
 
 ## 2、Android 基础
 
@@ -72,25 +84,7 @@
 
 
 ## 另外的
-2.1 Java
-2.1.1 volatile理解，JMM中主存和工作内存到底是啥？和JVM各个部分怎么个对应关系？
-参考link
-2.1.2 序列化
-Serializable在序列化时使用了反射,从而导致GC的频繁调用,参考link
-2.1.3 可见性，原子性，有序性(必考)
 
-可见性volatile,一个线程的修改对另外一个线程是马上可见的,
-原子性CAS操作,要么都做要么都不做
-有序性synchronized通过进入和退出Monitor(观察器)实现,CPU可能会乱序执行指令,如果在本线程内观察,所有操作都是有序的,如果在一个线程中观察另一个线程,所有操作都是无序的.参考link
-
-2.1.4 Java锁机制
-java锁机制其实是锁总线
-2.1.5 Java的常量池？不同String赋值方法，引用是否相等？
-字面值是常量,在字节码中使用id索引,equals相等引用不一定相等,Android上String的构造函数会被虚拟机拦截,重定向到StringFactory
-2.1.6 HashMap的实现?树化阈值?负载因子?
-数组加链表加红黑树,默认负载因子0.75,树化阈值8,这部分比较常考,建议专门准备.(打个小广告OWO,你也可以关注我的专栏,里面有一篇文章分析了HashMap和ArrayMap)
-2.1.7 Java实现无锁同步
-CAS的实现如AtomicInteger等等
 2.1.8 单例模式
 
 双重检查
