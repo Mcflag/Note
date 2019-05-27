@@ -128,7 +128,8 @@ Message知道要发到哪个Handler是因为Message把Handler保存到了target�
 
 裸new一个Thread(失控线程，不推荐)
 
-RxJava的调度器(io(优先级比低)，密集计算线程(优先级比高，用于执行密集计算任务)，安卓主线程， Looper创建(实际上内部也是创建了Handler))
+RxJava的调度器(io(优先级比低)，密集计算线程(优先级比高，用于执行密集计算任务)，安卓主线程，Looper创建(实际上内部也是创建了Handler))
+
 Java Executor框架的Executors#newCachedThreadPool()，不会造成资源浪费，60秒没有被使用的线程会被释放
 AsyncTask，内部使用FutureTask实现，通过Handler将结果转发到主线程，默认的Executor是共用的，如果同时执行多个AsyncTask，就可能需要排队，但是可以手动指定Executor解决这个问题，直接new匿名内部类会保存外部类的引用，可能会导致内存泄漏
 Android线程模型提供的Handler和HandlerThread
