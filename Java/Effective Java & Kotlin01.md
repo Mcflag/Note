@@ -59,3 +59,44 @@ class KotlinNutritionFacts @JvmOverloads constructor(
         private val sodium: Int = 0,
         private val carbohydrates: Int = 0)
 ```
+## Item 3:使用私有构造器或者枚举类型来强化Singleton属性
+
+Singleton就是单例，指仅被实例化一次的类。Singleton通常被用来表示一个无状态的对象，比如函数，或者一个独一无二的系统组建。
+
+```java
+public class JavaElvis {
+
+    private static JavaElvis instance;
+
+    private JavaElvis() {}
+
+    public static JavaElvis getInstance() {
+        if (instance == null) {
+            instance = new JavaElvis();
+        }
+        return instance;
+    }
+
+    public void leaveTheBuilding() {
+    }
+}
+```
+
+另外还可以声明一个包含单个元素的枚举来实现单例。如果我们的Singleton必须扩展自一个超类而不是枚举时，这种方式就不能使用了（虽然你也可以申请一个枚举，这个枚举实现自一个或多个接口）
+
+```java
+public enum Elvis { 
+    INSTANCE;
+    public void leaveTheBuilding() { ... } 
+}
+```
+
+在kotlin中直接使用object就可以实现一个单例。
+
+```kotlin
+object KotlinElvis {
+    fun leaveTheBuilding() {}
+}
+```
+
+
