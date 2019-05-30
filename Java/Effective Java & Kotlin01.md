@@ -99,4 +99,16 @@ object KotlinElvis {
 }
 ```
 
+## Item 4:通过私有化构造器强化不可实例化的能力
 
+通过将类做成抽象类以试图强制不可实例化是行不通的。因为抽象类能被继承而且相应的子类能被实例化。不仅如此，将类抽象化也会误导用户，让用户以为这个类是被设计成来继承的。
+
+将构造器私有化让其不可被实例化。不过这样做的副作用是该类不能被继承。
+
+```java
+public class UtilityClass {
+    private UtilityClass() {
+        throw new AssertionError();
+    }
+}
+```
