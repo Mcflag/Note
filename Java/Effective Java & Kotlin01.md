@@ -201,3 +201,60 @@ private static long sum() {
 
 相反，通过维护自己的对象池来避免创建对象也不是个好的实践，除非池中的对象是及其重量级的。真正正确使用对象池的经典例子是数据库连接池。由于建立数据库连接的代价是很高的，所以复用这些连接对象就显得很有意义了。然而，一般情况下，维护你自己的对象池会把代码弄的比较混乱，增加内存占用，而且还会降低性能。现代JVM实现具有高度优化的垃圾回收器，在对轻量级对象的处理上，这些回收器比对象池表现得更好。
 
+## Item 7:消除过时的对象引用
+
+虽然Java有自动的垃圾回收机制，但是仍然需要考虑内存管理的问题。比如如下代码：
+
+```java
+public class Stack {
+    private Object[] elements;
+    private int size = 0;
+    private static final int DEFAULT_INITIAL_CAPACITY = 16;
+    public Stack() {
+        elements = new Object[DEFAULT_INITIAL_CAPACITY];
+    } 
+    public void push(Object e) {
+        ensureCapacity();
+        elements[size++] = e;
+    } 
+    public Object pop() {
+        if (size == 0)
+            throw new EmptyStackException();
+        return elements[--size];
+    } 
+    /**
+     * Ensure space for at least one more element, roughly
+     * doubling the capacity each time the array needs to grow.
+     */
+    private void ensureCapacity() {
+        if (elements.length == size)
+            elements = Arrays.copyOf(elements, 2 * size + 1);
+    }
+}
+```
+
+所以代码中内存泄露的部分在哪里？如果一个栈先增长后收缩，那些被弹出栈的对象将不会被回收，即使使用栈的程序不再引用它们。这是因为栈里面包含着这些对象的过期引用（obsolete reference）。过期引用是指永远不会被再次解除的引用。在这个例子当中，任何在elements数组的活动区域（active portion）之外的引用都是过期的。活动部分由elements数组里面下标小于数据长度的元素组成。
+
+在支持垃圾回收的语言中，内存泄露的问题（更确切地说，是无意的对象保留）是很隐蔽的。如果一个对象的引用被无意保留了，不仅这个对象无法被回收，其它被这个对象引用的对象也无法被回收。即使只有少数几个对象引用被无意保留了，那么许许多多的对象也将跟着无法被回收，这里面潜伏着对性能重大的影响。
+
+这类问题的解决办法很简单：一旦一个对象过时了，只需清空对象引用就可以了。
+
+```java
+public Object pop() {
+    if (size == 0)
+        throw new EmptyStackException();
+    Object result = elements[--size];
+    elements[size] = null; // Eliminate obsolete reference
+    return result;
+}
+```
+
+所以我们什么时候应该清空一个引用？
+
+Stack类的哪个地方使得它有可能发生内存泄露？简单来说，因为它自己管理它自己的内存。存储池里都是elements数组里的元素（对象引用单元，而不是对象本身）。数组里活动区域的元素都是已分配的，数组其余部分的元素都是自由的。垃圾回收器无法知道这一点，因为对于垃圾回收器，elements数组里的所有对象引用都是等同的。只有程序员才知道数组非活动区域里的元素是不重要的。当某些元素变成非活动区域的一部分时，程序员可以立即手动将其清空。通过这种方式，程序员可以有效地告诉垃圾回收器可以回收了。
+
+一般来说，每当一个类自己管理它的内存时，程序员就要小心内存泄露的问题了。无论什么时候，只要一个元素被释放了，这个元素包含的所有引用都应该清空。
+
+缓存是内存泄露的另一个常见来源。当你往缓存里放了一个对象引用，就很容易忘记它还在那，使得它即使不再有用后还很长一段时间留在那里。有几个办法可以解决这个问题。如果你刚好要实现这么一个缓存，只要缓存之外存在只对某个key的引用，相应的项就有意义，那么就可以用WeakHashMap来充当这个缓存。但缓存中的项过期后，它们就会被自动清除。不过我们要记住，只有当所要的缓存项的生命周期是由该键的外部引用而不是值来决定时，WeakHashMap才有用。
+
+第三种常见的缓存泄漏的来源是监听器和其它调用。比方说我们想实现一个API，客户端能在这个API中注册回调，但假如后面既没有显式地取消注册又没有采取某些行动，那么它们将逐渐积累。一种可以保证回调被及时垃圾回收的方式是，只保留对它们的弱引用。例如，我们可以将它们存储为WeakHashMap的键。由于内存泄漏通常不会表现为明显的失败，所以内存泄漏的问题可能在系统中存留好多年。它们往往只有可以通过仔细的代码检查或者在堆内存分析（heap profiler）工具的帮助下才能被发现。
