@@ -258,3 +258,90 @@ Stack类的哪个地方使得它有可能发生内存泄露？简单来说，因
 缓存是内存泄露的另一个常见来源。当你往缓存里放了一个对象引用，就很容易忘记它还在那，使得它即使不再有用后还很长一段时间留在那里。有几个办法可以解决这个问题。如果你刚好要实现这么一个缓存，只要缓存之外存在只对某个key的引用，相应的项就有意义，那么就可以用WeakHashMap来充当这个缓存。但缓存中的项过期后，它们就会被自动清除。不过我们要记住，只有当所要的缓存项的生命周期是由该键的外部引用而不是值来决定时，WeakHashMap才有用。
 
 第三种常见的缓存泄漏的来源是监听器和其它调用。比方说我们想实现一个API，客户端能在这个API中注册回调，但假如后面既没有显式地取消注册又没有采取某些行动，那么它们将逐渐积累。一种可以保证回调被及时垃圾回收的方式是，只保留对它们的弱引用。例如，我们可以将它们存储为WeakHashMap的键。由于内存泄漏通常不会表现为明显的失败，所以内存泄漏的问题可能在系统中存留好多年。它们往往只有可以通过仔细的代码检查或者在堆内存分析（heap profiler）工具的帮助下才能被发现。
+
+## Item 8:避免使用终结方法和清理方法
+
+终结方法（Finalizer）即finalize()方法，是不可预知的，很多时候是危险的，而且一般情况下是不必要的。使用它们会导致程序行为不稳定，性能降低还有移植问题。终结方法只有少数几种用途，我们将会本条目后面谈到。但根据经验，我们应该避免使用终结方法。比起终结方法，清理方法相对安全点，但仍是不可以预知的，运行慢的，而且一般情况下是不必要的。
+
+终结方法和清理方法的一个缺点是无法保证它们及时地被执行。一个对象从变得不可到达开始到它的终结方法和清理方法被执行，中间可能会经过任意长的时间。这意味着，我们不应该在终结方法和清理方法中做对时间有严格要求的任务。例如，依赖终结方法或者清理方法来关闭文件资源是个严重的错误，因为打开文件的描述符是个有限的资源。如果在一段程序中很多文件都因为系统延迟执行终结方法或清理方法而停留在打开状态，那么当这段程序再打开一个文件时就会失败。
+
+Java语言规范不仅不保证终结方法或清理方法会被及时运行，而且不保证它们最终会运行。这样的话完全有可能一个程序在终止的时候，某些已经无法访问的对象却还没被终结方法或清理方法处理。所以，我们应该永远也不依赖于终结方法或清理方法来更新持久化状态。例如，依赖于终结方法或清理方法来释放共享资源（比如数据库）的永久锁，将很容易使得整个分布式系统停止运行。
+
+使用终结方法和清理方法还会导致严重的性能损失。换句话说，用终结方法来创建和销毁对象慢了大约50倍。这主要是因为终结方法会阻碍有效的垃圾回收。如果我们使用清理方法来清理类的所有对象，则其于终结方法速度相当，但如果我们将清理方法当作下面讨论到的安全网（safety net）来使用，则其比终结方法快很多。
+
+终结方法还有一个严重的安全问题：它将你的类暴露于终结方法攻击（finalizer attack）。终结方法攻击的背后机制很简单：如果一个异常从构造器或者序列化中抛出，恶意子类的终结方法可以运行在本应夭折的只构造了部分的对象上。终结方法可以在一个静态属性上记录对象的应用，从而阻止这个对象被垃圾回收。一旦记录了有缺陷的对象，就可以简单地调用该对象上的任意方法，而这些方法本来就不应该允许存在。从构造方法里抛出异常应该足以防止对象被创建，但假如终结方法也存在，就不是这样了。这种攻击会带来可怕的后果。final类能免疫于此类攻击，因为没有人能对final类进行恶意继承。为了防止非final类遭受终结方法攻击，我们可以写一个什么都不做而且是final的终结方法。
+
+所以，对于封装了需要终止使用的资源（比如文件或者线程），我们应该怎么做才能不用编写终止方法或者清理方法呢？我们只需让类继承AutoCloseable接口即可，并要求使用这个类的客户端在每个类实例都不再需要时就调用close方法，一般都是运用try-with-resources来保证资源的终止使用，即使抛出了异常，也能正确终止。这里有个细节值得提到，实例必须能对其是否被关闭保持追踪：close方法必须在一个属性里声明此对象不再有效，其它方法必须校验这个属性，如果对象被关闭后它们还被调用，就要抛出一个IllegalStateException异常。
+
+那么清理方法或者终结方法有什么好处呢？它们可能有两种合法用途。
+
+一种用途是作为安全网，以防资源拥有者忘了调用资源的close方法。虽然清理方法或者终结方法并不保证会被及时执行（或根本就不运行），但晚释放总比客户端忘了释放好。一些Java类库，如FileInputStream，FileOutputStream，ThreadPoolExecutor，还有java.sql.Connection，都有作为安全网的终结方法。
+
+清理方法的第二种合法用途与对象的本地对等体（native peer）有关。本地对等体是指非Java实现的本地对象，普通对象通过本地方法代理给本地对象。由于本地对等体不是普通的对象，垃圾回收器并不知道它的存在进而当Java对等体被回收时也不会去回收它。而清理方法或终结方法正是适合完成这件事的工具，但前提条件是接受其性能并且本地对等体不持有关键资源。假如性能问题无法接受或者本地对等体持有的资源必须被及时回收，那么我们的类还是应该实现一个close方法，就如我们一开始提到。
+
+清除器的使用有些棘手。下面是一个简单的 Room 类，展示了这个设施。让我们假设房间在回收之前必须被清理。Room 类实现了 AutoCloseable；它的自动清洗安全网使用了清除器，这只是一个实现细节。与终结器不同，清除器不会污染类的公共 API：
+
+```java
+// An autocloseable class using a cleaner as a safety net
+public class Room implements AutoCloseable {
+    private static final Cleaner cleaner = Cleaner.create();
+
+    // Resource that requires cleaning. Must not refer to Room!
+    private static class State implements Runnable {
+        int numJunkPiles; // Number of junk piles in this room
+
+        State(int numJunkPiles) {
+            this.numJunkPiles = numJunkPiles;
+        }
+
+        // Invoked by close method or cleaner
+        @Override
+        public void run() {
+            System.out.println("Cleaning room");
+            numJunkPiles = 0;
+        }
+    }
+
+    // The state of this room, shared with our cleanable
+    private final State state;
+    // Our cleanable. Cleans the room when it’s eligible for gc
+    private final Cleaner.Cleanable cleanable;
+
+    public Room(int numJunkPiles) {
+        state = new State(numJunkPiles);
+        cleanable = cleaner.register(this, state);
+    }
+
+    @Override
+    public void close() {
+        cleanable.clean();
+    }
+}
+```
+
+对 run方法的调用将由以下两种方法之一触发：通常是通过调用 Room 的 close 方法来触发，调用 Cleanable 的 clean 方法。如果当一个 Room 实例有资格进行垃圾收集时，客户端没有调用 close 方法，那么清除器将调用 State 的run 方法（希望如此）。状态实例不引用其 Room 实例是非常重要的。如果它这样做了，它将创建一个循环，以防止 Room 实例有资格进行垃圾收集（以及自动清理）。因此，状态必须是一个静态嵌套类，因为非静态嵌套类包含对其封闭实例的引用。
+
+就像我们之前说的，Room 类的清除器只是用作安全网。如果客户端将所有 Room 实例包围在带有资源的 try 块中，则永远不需要自动清理。这位表现良好的客户端展示了这种做法：
+
+```java
+public class Adult {
+    public static void main(String[] args) {
+        try (Room myRoom = new Room(7)) {
+            System.out.println("Goodbye");
+        }
+    }
+}
+```
+
+运行 Adult 程序打印Goodbye，然后是打扫房间。但这个从不打扫房间的不守规矩的程序怎么办？
+
+```java
+public class Teenager {
+    public static void main(String[] args) {
+        new Room(99);
+        System.out.println("Peace out");
+    }
+}
+```
+
+你可能期望它打印出Peace out，然后打扫房间，但在我的机器上，它从不打扫房间；它只是退出。这就是我们之前提到的不可预测性。Cleaner 规范说：在 System.exit 中，清洁器的行为是特定于实现的。不保证清理操作是否被调用。虽然规范没有说明，但对于普通程序退出来说也是一样。在我的机器上，将 System.gc()添加到 Teenager 的主要方法中就足以让它在退出之前打扫房间，但不能保证在其他机器上看到相同的行为。总之，不要使用清洁器，或者在 Java 9 之前的版本中使用终结器，除非是作为安全网或终止非关键的本机资源。即便如此，也要小心不确定性和性能后果。
